@@ -85,7 +85,9 @@ complete(item) {
   //calling the move item function
   this.moveItem(item, 'done');
 }
-
+crit(item) {
+  this.moveItem(item, 'crit');
+}
 //moving tasks to later tab, and deleting them from todays tab
 later(item){
   //calling the move item function

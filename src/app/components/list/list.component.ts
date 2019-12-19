@@ -4,6 +4,7 @@ import { AngularFirestore } from '@angular/fire/firestore';
 import { AlertController } from '@ionic/angular';
 import { AttachSession } from 'protractor/built/driverProviders';
 import { Placeholder } from '@angular/compiler/src/i18n/i18n_ast';
+//import { ConstantService } from 'src/app/providers/contstant/constant.service';
 
 @Component({
   selector: 'app-list',
@@ -20,9 +21,10 @@ items = [];
 @Input('allowCrit') allowCrit: boolean;
 @Input('allowLater') allowLater: boolean;
 loading = true;
+  constant: any;
 
 constructor(private afAuth: AngularFireAuth, private db: AngularFirestore,
-   private alertCtrl: AlertController,) {
+   private alertCtrl: AlertController) {
     console.log(this.list);
     }
     
@@ -49,80 +51,120 @@ ngOnInit() {
 }
 //this is the add button for when a new task is being added
 async add() {
+  this.addOrEdit('New Task', val => this.handleAddItem(val.task));
+}
+
+async edit(item) {
+  this.addOrEdit('Edit Task', val => this.handleEditItem(val.task, item), item);
+}
+
+async addOrEdit(header, handler, item?) {
   const alert = await this.alertCtrl.create({
-    header: 'New Task',
-    message:'Insert details below:',
-    buttons:[
+    header,
+    buttons: [
       {
-        //this is the cancel button for when a new task is being canceled
         text: 'Cancel',
         role: 'cancel',
         handler: () => {
-          console.log('Confirm Cancel');
         }
       }, {
-        text: 'Add',
-        handler: (val) => {
-          console.log('Confirm Add');
-          //adding a time stamp as to when the task was added
-          let now = new Date();
-          let nowUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
-          now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds()));
-          //sending the task to the firbase database
-          this.db.collection(`users/${this.afAuth.auth.currentUser.uid}/${this.list}`).add({
-            text: val.task,
-            //asigning the task a position number, so that they can be ordered, it checks to see if there are any existing tasks and what their numbers are. If there arent, it starts at 0
-            pos: this.items.length ? this.items[0].pos + 1 : 0,
-            created: nowUtc,
-          });
-        }
+        text: 'Ok',
+        handler,
       }
     ],
     inputs: [
       {
         name: 'task',
-        type: "text",
-        placeholder: 'My Task',
+        type: 'text',
+        placeholder: 'My task',
+        value: item ? item.text : '',
       },
     ],
   });
-  return await alert.present();
+
+  await alert.present();
+
+  alert.getElementsByTagName('input')[0].focus();
+
+  alert.addEventListener('keydown', (val => {
+    if (val.keyCode === 13) {
+      handler({task: val.srcElement['value']});
+      alert.dismiss();
+    }
+  }));
 }
-//deleting files from todays tasks
-delete(item){
-  this.db.doc(`users/${this.afAuth.auth.currentUser.uid}/${this.list}/${item.id}`).delete()
+
+handleAddItem(text: string) {
+  if (!text.trim().length)
+    return;
+
+  let now = new Date();
+  let nowUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(),
+    now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds()));
+
+  this.db.collection(`users/${this.afAuth.auth.currentUser.uid}/crit`).add({
+    text,
+    pos: this.items.length ? this.items[0].pos + 1 : 0,
+    created: nowUtc,
+  });
+
+  if (this.items.length >= this.constant.maxListSize)
+    this.alertCtrl.create({
+      header: 'Critical Oveload',
+      subHeader: 'Too many important items!',
+      message: `You have over ${this.constant.maxListSize} items in this list,
+only showing the top ${this.constant.maxListSize}.`,
+      buttons: ['Okay'],
+    }).then(warning => {
+      warning.present();
+    });
 }
+
+handleEditItem(text: string, item) {
+  this.db.doc(`users/${this.afAuth.auth.currentUser.uid}/${this.list}/${item.id}`).set({
+    text,
+  }, {merge: true});
+}
+
+delete(item) {
+  this.db.doc(`users/${this.afAuth.auth.currentUser.uid}/${this.list}/${item.id}`).delete();
+}
+
 crit(item) {
   this.moveItem(item, 'crit');
 }
-  //moving tasks to completed, and deleting them from todays tab
+
 complete(item) {
-  //calling the move item function
   this.moveItem(item, 'done');
 }
 
-//moving tasks to later tab, and deleting them from todays tab
-later(item){
-  //calling the move item function
+later(item) {
   this.moveItem(item, 'later');
 }
-//function which will move items efficiently
-moveItem(item, list: string){
+
+moveItem(item, list: string) {
   this.db.doc(`users/${this.afAuth.auth.currentUser.uid}/${this.list}/${item.id}`).delete();
-  //storing task ID in a temp variable before it is deleted from todays task, meanind the variable can be reassigned its ID
+
   let id = item.id;
   delete item.id;
-  // this is looking at the entire collection, so that the task can be reasigned a position number and put in the correct place.
+
   this.db.collection(`users/${this.afAuth.auth.currentUser.uid}/${list}`, ref => {
-    //the limit(1) function ensures that only the newest item in the lsit is looked at
-    return ref.orderBy('pos','desc').limit(1);
+    return ref.orderBy('pos', 'desc').limit(1);
   }).get().toPromise().then(qSnap => {
-    //the line below sets the pos to 0, and the next lines check to see if there is items in the list. If htere are, the 0 gets over written and the item that is being moved is assigned the correct pos number.
     item.pos = 0;
     qSnap.forEach(a => {
       item.pos = a.data().pos + 1;
     });
-  this.db.doc(`users/${this.afAuth.auth.currentUser.uid}/${list}/${item.id}`).set(item);
+    this.db.doc(`users/${this.afAuth.auth.currentUser.uid}/${list}/${id}`).set(item);
   });
+}
+
+moveByOffset(index, offset) {
+  this.db.doc(`users/${this.afAuth.auth.currentUser.uid}/${this.list}/${this.items[index].id}`).set({
+    pos: this.items[index+offset].pos
+  }, {merge: true});
+  this.db.doc(`users/${this.afAuth.auth.currentUser.uid}/${this.list}/${this.items[index+offset].id}`).set({
+    pos: this.items[index].pos
+  }, {merge: true});
 }
 }

@@ -1,4 +1,8 @@
+<ion-header>
+  <app-list-header [title]="'Upcoming'" [items]="myList.items" (add)="myList.add" [loading]="myList.loading"></app-list-header>
+</ion-header>
+
 <ion-content>
-  <app-list [title]="'Upcoming'" [list]="'later'" [allowDone]="true" [allowLater]="false" [allowCrit]="true">
+  <app-list #myList [title]="'Upcoming'" [list]="'later'" [allowDone]="true" [allowLater]="false" [allowCrit]="true">
   </app-list>
 </ion-content>

@@ -29,11 +29,13 @@ export class AppComponent {
     this.platform.ready().then(() => {
       this.statusBar.styleDefault();
       this.splashScreen.hide();
-
+      //checks to see if a user is already logged in
       this.afAuth.authState.subscribe(user => {
+        //if no user is logged in, they are directed to the log in page
         if (!user) {
           this.router.navigateByUrl('/login');
           }
+        //if they are logged in, they are redirected to their tabs page
         else {
           this.router.navigateByUrl('/tabs');   
         }
